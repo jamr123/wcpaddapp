@@ -1,8 +1,8 @@
 #include <SoftwareSerial.h>
-SoftwareSerial SIM900(4, 3);
+SoftwareSerial SIM900(8, 7);
 
-int ledGreen = 9;
-int ledRed = 8;
+int ledGreen = 3;
+int ledRed = 2;
 int rele1= 6;
 int rele2= 7;
 
@@ -13,7 +13,7 @@ String readData = "";
 
 
 char uri[] = "PUT /arduino/report2.php?";
-char variablesHour[] = "device_id=0001&status=ok&msg=hourly-report&lat=20.6193209&lng=-103.387509 ";
+char variablesHour[100];
 char variablesRest[] = "device_id=0001&status=ok&msg=unit-restart ";
 char host[] = "HTTP/1.1\r\nHost: www.wcpaddapp.com\r\n\r\n ";
 
@@ -24,7 +24,7 @@ unsigned long time3 = 0;
 
 void setup()
 {
-  SIM900.begin(9600);
+  SIM900.begin(19200);
   Serial.begin(9600);
 
   pinMode(ledGreen, OUTPUT);
@@ -45,10 +45,14 @@ void setup()
   PeticionHttpRestart();
   time1 = millis();
   time2 = millis();
+  
 }
 
 void loop()
 {
+
+ 
+  
 
   if ( millis() > (time1 + 60000)) {
 
@@ -72,7 +76,13 @@ void loop()
     time2 = millis();
   }
 
+   if ( millis() > (time3 + 5000)) {
+    gps();
+    time3 = millis();
+  }
+
   response();
+ 
 }
 
 
@@ -105,6 +115,9 @@ int enviarAT(String ATcommand, char* resp_correcta, unsigned int tiempo)
 
   while ((correcto == 0) && ((millis() - anterior) < tiempo));
   Serial.println(respuesta);
+  
+ 
+
 
   return correcto;
 }
@@ -126,7 +139,7 @@ void power_on()
 
 
     while (respuesta == 0) {
-      respuesta = enviarAT("AT", "OK", 2000);
+      respuesta = enviarAT("AT\r\n", "OK", 2000);
       SIM900.println(respuesta);
     }
   }
@@ -199,11 +212,10 @@ void PeticionHttpHour()
     int len = strlen(uri) + strlen(variablesHour) + strlen(host);
     sprintf(aux_str, "AT+CIPSEND=%d\r\n", len);
     if (enviarAT(aux_str, ">", 10000) == 1)
-    {
+    { 
       enviarAT(uri, "OK", 1000);
       enviarAT(variablesHour, "OK", 1000);
       enviarAT(host, "OK", 1000);
-
 
     }
   }
@@ -216,10 +228,42 @@ void PeticionHttpHour()
 
 void gps() {
 
-  enviarAT("AT+CGNSPWR=1\r\n", "OK", 1000);
-  enviarAT("AT+CGNSINF\r\n", "OK", 1000);
-  enviarAT("AT+CGNSPWR=0\r\n", "OK", 1000);
+  enviarAT("AT+CGNSPWR?\r\n","OK",1000);
+  enviarAT("AT+CGNSPWR=1\r\n","OK",1000);
+  
 
+  int x = 0;
+  bool correcto = 0;
+  char respuesta[100];
+  unsigned long anterior;
+
+  memset(respuesta, '\0', 100);
+  delay(100);
+  while ( SIM900.available() > 0) SIM900.read();
+  SIM900.print("AT+CGNSINF\r\n");
+  x = 0;
+  anterior = millis();
+  do {
+
+    if (SIM900.available() != 0)
+    {
+      respuesta[x] = SIM900.read();
+      x++;
+    }
+  }
+
+  while ((correcto == 0) && ((millis() - anterior) < 1000));
+
+  String resp=String(respuesta);
+  String LAT=getValue(resp,',',3);
+  String LNG=getValue(resp,',',4);
+  Serial.println(LAT);
+  Serial.println(LNG);
+  String vars="device_id=0001&status=ok&msg=hourly-report&lat="+LAT+"&lng="+LNG+" ";
+  vars.toCharArray(variablesHour, vars.length());
+  Serial.println(variablesHour);
+  
+  
 }
 
 void smsRead() {
@@ -267,10 +311,10 @@ void response() {
         }
       if(r2=="0"){
         digitalWrite(rele2, HIGH);
-        }
-
-      
+        }   
     }
+
+    
   }
 
 
